@@ -1,0 +1,32 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build servidor",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-o",
+                "${workspaceFolder}/servidor.exe",
+                "${workspaceFolder}/servidor.cpp",
+                "-lws2_32"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build cliente",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-o",
+                "${workspaceFolder}/cliente.exe",
+                "${workspaceFolder}/cliente.cpp",
+                "-lws2_32"
+            ],
+            "group": "build"
+        }
+    ]
+}
