@@ -55,15 +55,6 @@ int main(int argc, char *argv[]) {
             if (strncmp("Ganaste", buffer, 7) == 0 || strncmp("Perdiste", buffer, 8) == 0) {
                 break;
             }
-
-            int columna;
-            std::cout << "Tu turno - Ingresa el número de columna (1-7): ";
-            std::cin >> columna;
-            --columna; // Ajustar para índice base 0
-
-            memset(buffer, 0, sizeof(buffer));
-            _itoa_s(columna, buffer, 10);
-            send(sockfd, buffer, strlen(buffer), 0);
         } else if (bytesReceived == 0) {
             std::cout << "El servidor cerró la conexión.\n";
             break;
@@ -71,6 +62,19 @@ int main(int argc, char *argv[]) {
             std::cerr << "Error al recibir datos: " << WSAGetLastError() << std::endl;
             break;
         }
+
+        int columna;
+        std::cout << "Tu turno - Ingresa el número de columna (1-7): ";
+        std::cin >> columna;
+        // Validar la entrada de columna
+        if (columna < 1 || columna > 7) {
+            std::cout << "Número de columna no válido. Inténtalo de nuevo.\n";
+            continue;
+        }
+
+        memset(buffer, 0, sizeof(buffer));
+        _itoa_s(columna, buffer, 10);
+        send(sockfd, buffer, strlen(buffer), 0);
     }
 
     // Cerrar el socket y limpiar Winsock

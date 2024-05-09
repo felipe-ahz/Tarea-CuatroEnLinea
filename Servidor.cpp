@@ -87,6 +87,7 @@ void manejar_cliente(SOCKET socket_cliente) {
         } else {
             std::cout << "Turno del servidor (ingresa la columna): ";
             std::cin >> columna;
+            columna--; // Ajuste para índice base 0
             if (jugar_en_columna(tablero, columna, 'S')) {
                 if (verificar_ganador(tablero, 'S')) {
                     enviar_tablero(tablero, socket_cliente);
@@ -96,6 +97,7 @@ void manejar_cliente(SOCKET socket_cliente) {
                 jugador_actual = 'C';
             }
         }
+        imprimir_tablero(tablero);
         enviar_tablero(tablero, socket_cliente);
     }
     closesocket(socket_cliente);
