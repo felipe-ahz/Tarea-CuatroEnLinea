@@ -1,85 +1,113 @@
 #include <iostream>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <cstring>
-#include <string>
 
-#pragma comment(lib, "ws2_32.lib") // Enlazar la biblioteca de Winsock
+#pragma comment(lib, "Ws2_32.lib")
 
-int main(int argc, char *argv[]) {
-    WSADATA wsa_data;
-    SOCKET sockfd;
-    struct sockaddr_in direccion_servidor;
-    char buffer[1024];
-    int puerto;
+#define ROWS 6
+#define COLS 7
+#define EMPTY ' '
 
-    if (argc < 3) {
-        std::cerr << "Uso: " << argv[0] << " <dirección IP> <puerto>\n";
-        return 1;
+char board[ROWS][COLS];
+
+// Inicializa el tablero
+void initializeBoard() {
+    for (int i = 0; i < ROWS; ++i) {
+        for (int j = 0; j < COLS; ++j) {
+            board[i][j] = EMPTY;
+        }
+    }
+}
+
+// Imprime el tablero
+void printBoard() {
+    std::cout << "TABLERO" << std::endl;
+    for (int i = 0; i < ROWS; ++i) {
+        for (int j = 0; j < COLS; ++j) {
+            std::cout << board[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << "-------------" << std::endl;
+    for (int j = 0; j < COLS; ++j) {
+        std::cout << " " << (j + 1);
+    }
+    std::cout << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        std::cerr << "Uso: " << argv[0] << " <direccion IP> <puerto>" << std::endl;
+        return -1;
     }
 
-    // Inicializar Winsock
-    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
-        std::cerr << "Error al inicializar Winsock: " << WSAGetLastError() << std::endl;
-        return 1;
+    const char* server_ip = argv[1];
+    int port = atoi(argv[2]);
+    WSADATA wsaData;
+    SOCKET sock;
+    struct sockaddr_in serv_addr;
+    char buffer[1024] = {0};
+    int valread;
+
+    // Inicializar WinSock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "Error al inicializar WinSock" << std::endl;
+        return -1;
     }
 
-    // Crear el socket
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == INVALID_SOCKET) {
-        std::cerr << "Error al crear el socket: " << WSAGetLastError() << std::endl;
+    // Crear socket
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+        std::cerr << "Error al crear el socket" << std::endl;
         WSACleanup();
-        return 1;
+        return -1;
     }
 
-    puerto = atoi(argv[2]);
-    direccion_servidor.sin_family = AF_INET;
-    direccion_servidor.sin_port = htons(puerto);
-    direccion_servidor.sin_addr.s_addr = inet_addr(argv[1]);
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+
+    // Convertir direcciones IPv4 e IPv6 de texto a formato binario
+    if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
+        std::cerr << "Direccion inválida / Direccion no compatible" << std::endl;
+        closesocket(sock);
+        WSACleanup();
+        return -1;
+    }
 
     // Conectar al servidor
-    if (connect(sockfd, (struct sockaddr *)&direccion_servidor, sizeof(direccion_servidor)) == SOCKET_ERROR) {
-        std::cerr << "Error al conectar con el servidor: " << WSAGetLastError() << std::endl;
-        closesocket(sockfd);
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == SOCKET_ERROR) {
+        std::cerr << "Error al conectar" << std::endl;
+        closesocket(sock);
         WSACleanup();
-        return 1;
+        return -1;
     }
+    std::cout << "Conectado al servidor" << std::endl;
 
-    std::cout << "Conectado al servidor. Esperando el juego...\n";
+    valread = recv(sock, buffer, 1024, 0);
+    std::cout << buffer << std::endl;
 
-    // Comunicación con el servidor
-    while (true) {
-        memset(buffer, 0, sizeof(buffer));
-        int bytesReceived = recv(sockfd, buffer, 1024, 0);
-        if (bytesReceived > 0) {
-            std::cout << buffer;
-            if (strncmp("Ganaste", buffer, 7) == 0 || strncmp("Perdiste", buffer, 8) == 0) {
-                break;
+    bool game_over = false;
+    while (!game_over) {
+        valread = recv(sock, buffer, 1024, 0);
+        if (valread > 0) {
+            buffer[valread] = '\0';
+            std::cout << buffer << std::endl;
+            if (strstr(buffer, "ha ganado") != nullptr) {
+                game_over = true;
+                continue;
             }
-        } else if (bytesReceived == 0) {
-            std::cout << "El servidor cerró la conexión.\n";
-            break;
-        } else {
-            std::cerr << "Error al recibir datos: " << WSAGetLastError() << std::endl;
-            break;
-        }
 
-        int columna;
-        std::cout << "Tu turno - Ingresa el número de columna (1-7): ";
-        std::cin >> columna;
-        // Validar la entrada de columna
-        if (columna < 1 || columna > 7) {
-            std::cout << "Número de columna no válido. Inténtalo de nuevo.\n";
-            continue;
+            if (strstr(buffer, "Turno del jugador C") != nullptr) {
+                std::cout << "Ingrese su movimiento (1-7): ";
+                std::string move;
+                std::cin >> move;
+                send(sock, move.c_str(), move.length(), 0);
+            }
         }
-
-        memset(buffer, 0, sizeof(buffer));
-        _itoa_s(columna, buffer, 10);
-        send(sockfd, buffer, strlen(buffer), 0);
     }
 
-    // Cerrar el socket y limpiar Winsock
-    closesocket(sockfd);
+    // Cerrar el socket
+    closesocket(sock);
     WSACleanup();
-
     return 0;
 }

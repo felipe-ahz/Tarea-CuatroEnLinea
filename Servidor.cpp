@@ -1,200 +1,243 @@
 #include <iostream>
-#include <vector>
-#include <thread>
-#include <mutex>
-#include <cstring>
 #include <winsock2.h>
-#include <string>
+#include <ws2tcpip.h>
+#include <cstring>
 
-#pragma comment(lib, "ws2_32.lib") // Enlazar la biblioteca de Winsock
+#pragma comment(lib, "Ws2_32.lib")
 
-#define TAMANO_TABLERO 6
-#define NUM_COLUMNAS 7
-#define PUERTO 7777
+#define ROWS 6
+#define COLS 7
+#define EMPTY ' '
 
-std::mutex cout_mutex;
+char board[ROWS][COLS];
 
-void manejar_cliente(SOCKET socket_cliente);
-void imprimir_tablero(const char tablero[TAMANO_TABLERO][NUM_COLUMNAS]);
-bool jugar_en_columna(char tablero[TAMANO_TABLERO][NUM_COLUMNAS], int columna, char ficha);
-bool verificar_ganador(const char tablero[TAMANO_TABLERO][NUM_COLUMNAS], char ficha);
-void inicializar_tablero(char tablero[TAMANO_TABLERO][NUM_COLUMNAS]);
-void enviar_tablero(const char tablero[TAMANO_TABLERO][NUM_COLUMNAS], SOCKET sock);
-bool recibir_jugada(SOCKET sock, int& columna);
-
-int main(int argc, char *argv[]) {
-    WSADATA wsa_data;
-    SOCKET sockfd, new_sock;
-    struct sockaddr_in direccion_servidor, direccion_cliente;
-    int tamano_direccion = sizeof(struct sockaddr_in);
-
-    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
-        std::cerr << "Error al inicializar Winsock." << std::endl;
-        return 1;
-    }
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == INVALID_SOCKET) {
-        std::cerr << "Error creando el socket." << std::endl;
-        return 1;
-    }
-
-    int puerto = (argc > 1) ? atoi(argv[1]) : PUERTO;
-    direccion_servidor.sin_family = AF_INET;
-    direccion_servidor.sin_port = htons(puerto);
-    direccion_servidor.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(sockfd, (struct sockaddr *)&direccion_servidor, sizeof(direccion_servidor)) == SOCKET_ERROR) {
-        std::cerr << "Error al enlazar el socket." << std::endl;
-        return 1;
-    }
-
-    listen(sockfd, 5);
-    std::cout << "Esperando conexiones en el puerto " << puerto << "..." << std::endl;
-
-    while (true) {
-        new_sock = accept(sockfd, (struct sockaddr *)&direccion_cliente, &tamano_direccion);
-        if (new_sock == INVALID_SOCKET) {
-            std::cerr << "Error al aceptar conexión." << std::endl;
-            continue;
-        }
-        std::thread(manejar_cliente, new_sock).detach();
-    }
-
-    closesocket(sockfd);
-    WSACleanup();
-    return 0;
-}
-
-void manejar_cliente(SOCKET socket_cliente) {
-    char tablero[TAMANO_TABLERO][NUM_COLUMNAS];
-    inicializar_tablero(tablero);
-    int columna;
-    char jugador_actual = 'C'; // Comienza el cliente
-
-    enviar_tablero(tablero, socket_cliente);
-    while (true) {
-        if (jugador_actual == 'C') {
-            if (!recibir_jugada(socket_cliente, columna)) break;
-            if (jugar_en_columna(tablero, columna, 'C')) {
-                if (verificar_ganador(tablero, 'C')) {
-                    enviar_tablero(tablero, socket_cliente);
-                    send(socket_cliente, "Ganaste\n", 9, 0);
-                    break;
-                }
-                jugador_actual = 'S';
-            }
-        } else {
-            std::cout << "Turno del servidor (ingresa la columna): ";
-            std::cin >> columna;
-            columna--; // Ajuste para índice base 0
-            if (jugar_en_columna(tablero, columna, 'S')) {
-                if (verificar_ganador(tablero, 'S')) {
-                    enviar_tablero(tablero, socket_cliente);
-                    send(socket_cliente, "Perdiste\n", 10, 0);
-                    break;
-                }
-                jugador_actual = 'C';
-            }
-        }
-        imprimir_tablero(tablero);
-        enviar_tablero(tablero, socket_cliente);
-    }
-    closesocket(socket_cliente);
-}
-
-void inicializar_tablero(char tablero[TAMANO_TABLERO][NUM_COLUMNAS]) {
-    for (int i = 0; i < TAMANO_TABLERO; ++i) {
-        for (int j = 0; j < NUM_COLUMNAS; ++j) {
-            tablero[i][j] = ' ';
+// Inicializa el tablero
+void initializeBoard() {
+    for (int i = 0; i < ROWS; ++i) {
+        for (int j = 0; j < COLS; ++j) {
+            board[i][j] = EMPTY;
         }
     }
 }
 
-void imprimir_tablero(const char tablero[TAMANO_TABLERO][NUM_COLUMNAS]) {
-    std::lock_guard<std::mutex> lock(cout_mutex);
-    for (int i = 0; i < TAMANO_TABLERO; ++i) {
-        for (int j = 0; j < NUM_COLUMNAS; ++j) {
-            std::cout << '[' << tablero[i][j] << ']';
+// Imprime el tablero
+void printBoard() {
+    std::cout << "TABLERO" << std::endl;
+    for (int i = 0; i < ROWS; ++i) {
+        for (int j = 0; j < COLS; ++j) {
+            std::cout << board[i][j] << " ";
         }
-        std::cout << '\n';
+        std::cout << std::endl;
     }
-    std::cout << "-------------\n";
-    for (int j = 1; j <= NUM_COLUMNAS; ++j) {
-        std::cout << " " << j << " ";
+    std::cout << "-------------" << std::endl;
+    for (int j = 0; j < COLS; ++j) {
+        std::cout << " " << (j + 1);
     }
-    std::cout << '\n';
+    std::cout << std::endl;
 }
 
-bool jugar_en_columna(char tablero[TAMANO_TABLERO][NUM_COLUMNAS], int columna, char ficha) {
-    if (columna < 0 || columna >= NUM_COLUMNAS) {
+// Inserta una ficha en la columna dada
+bool makeMove(int col, char player) {
+    if (col < 0 || col >= COLS || board[0][col] != EMPTY) {
         return false;
     }
-    for (int i = TAMANO_TABLERO - 1; i >= 0; --i) {
-        if (tablero[i][columna] == ' ') {
-            tablero[i][columna] = ficha;
+
+    for (int i = ROWS - 1; i >= 0; --i) {
+        if (board[i][col] == EMPTY) {
+            board[i][col] = player;
             return true;
         }
     }
     return false;
 }
 
-bool verificar_ganador(const char tablero[TAMANO_TABLERO][NUM_COLUMNAS], char ficha) {
-    // Verificar horizontalmente
-    for (int i = 0; i < TAMANO_TABLERO; ++i) {
-        for (int j = 0; j <= NUM_COLUMNAS - 4; ++j) {
-            if (tablero[i][j] == ficha && tablero[i][j+1] == ficha && tablero[i][j+2] == ficha && tablero[i][j+3] == ficha) {
+// Verifica si hay cuatro en línea
+bool checkWin(char player) {
+    // Check horizontal
+    for (int i = 0; i < ROWS; ++i) {
+        for (int j = 0; j < COLS - 3; ++j) {
+            if (board[i][j] == player && board[i][j + 1] == player && board[i][j + 2] == player && board[i][j + 3] == player) {
                 return true;
             }
         }
     }
-    // Verificar verticalmente
-    for (int j = 0; j < NUM_COLUMNAS; ++j) {
-        for (int i = 0; i <= TAMANO_TABLERO - 4; ++i) {
-            if (tablero[i][j] == ficha && tablero[i+1][j] == ficha && tablero[i+2][j] == ficha && tablero[i+3][j] == ficha) {
+
+    // Check vertical
+    for (int i = 0; i < ROWS - 3; ++i) {
+        for (int j = 0; j < COLS; ++j) {
+            if (board[i][j] == player && board[i + 1][j] == player && board[i + 2][j] == player && board[i + 3][j] == player) {
                 return true;
             }
         }
     }
-    // Verificar diagonalmente (descendente)
-    for (int i = 0; i <= TAMANO_TABLERO - 4; ++i) {
-        for (int j = 0; j <= NUM_COLUMNAS - 4; ++j) {
-            if (tablero[i][j] == ficha && tablero[i+1][j+1] == ficha && tablero[i+2][j+2] == ficha && tablero[i+3][j+3] == ficha) {
+
+    // Check diagonal (bottom-left to top-right)
+    for (int i = 3; i < ROWS; ++i) {
+        for (int j = 0; j < COLS - 3; ++j) {
+            if (board[i][j] == player && board[i - 1][j + 1] == player && board[i - 2][j + 2] == player && board[i - 3][j + 3] == player) {
                 return true;
             }
         }
     }
-    // Verificar diagonalmente (ascendente)
-    for (int i = 3; i < TAMANO_TABLERO; ++i) {
-        for (int j = 0; j <= NUM_COLUMNAS - 4; ++j) {
-            if (tablero[i][j] == ficha && tablero[i-1][j+1] == ficha && tablero[i-2][j+2] == ficha && tablero[i-3][j+3] == ficha) {
+
+    // Check diagonal (top-left to bottom-right)
+    for (int i = 0; i < ROWS - 3; ++i) {
+        for (int j = 0; j < COLS - 3; ++j) {
+            if (board[i][j] == player && board[i + 1][j + 1] == player && board[i + 2][j + 2] == player && board[i + 3][j + 3] == player) {
                 return true;
             }
         }
     }
+
     return false;
 }
 
-void enviar_tablero(const char tablero[TAMANO_TABLERO][NUM_COLUMNAS], SOCKET sock) {
-    std::string buffer = "Tablero actual:\n";
-    for (int i = 0; i < TAMANO_TABLERO; ++i) {
-        for (int j = 0; j < NUM_COLUMNAS; ++j) {
-            buffer += '[';
-            buffer += tablero[i][j];
-            buffer += ']';
-        }
-        buffer += '\n';
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        std::cerr << "Uso: " << argv[0] << " <puerto>" << std::endl;
+        return -1;
     }
-    send(sock, buffer.c_str(), buffer.length(), 0);
-}
 
-bool recibir_jugada(SOCKET sock, int& columna) {
-    char buffer[1024];
-    int bytes_recibidos = recv(sock, buffer, 1024, 0);
-    if (bytes_recibidos > 0) {
-        buffer[bytes_recibidos] = '\0';
-        columna = atoi(buffer) - 1; // ajuste para índice base 0
-        return true;
+    int port = atoi(argv[1]);
+    WSADATA wsaData;
+    int server_fd, new_socket, valread;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+    char buffer[1024] = {0};
+    const char* welcome = "Bienvenido al juego de Cuatro en Linea. Eres el jugador 1 (S)\n";
+
+    // Inicializar WinSock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "Error al inicializar WinSock" << std::endl;
+        return -1;
     }
-    return false;
+
+    // Crear descriptor de archivo de socket
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+        std::cerr << "Error al crear el socket" << std::endl;
+        WSACleanup();
+        return -1;
+    }
+    std::cout << "Socket creado exitosamente" << std::endl;
+
+    // Adjuntar el socket al puerto
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt)) < 0) {
+        std::cerr << "Error en setsockopt" << std::endl;
+        closesocket(server_fd);
+        WSACleanup();
+        return -1;
+    }
+    std::cout << "setsockopt configurado exitosamente" << std::endl;
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(port);
+
+    // Vincular el socket a la dirección de red y al puerto
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == SOCKET_ERROR) {
+        std::cerr << "Error al vincular el socket" << std::endl;
+        closesocket(server_fd);
+        WSACleanup();
+        return -1;
+    }
+    std::cout << "Vinculado al puerto " << port << " exitosamente" << std::endl;
+
+    // Comenzar a escuchar conexiones entrantes
+    if (listen(server_fd, 3) < 0) {
+        std::cerr << "Error al escuchar" << std::endl;
+        closesocket(server_fd);
+        WSACleanup();
+        return -1;
+    }
+    std::cout << "Escuchando en el puerto " << port << std::endl;
+
+    // Aceptar una conexión entrante
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (int*)&addrlen)) == INVALID_SOCKET) {
+        std::cerr << "Error al aceptar la conexión" << std::endl;
+        closesocket(server_fd);
+        WSACleanup();
+        return -1;
+    }
+    std::cout << "Conexión aceptada" << std::endl;
+
+    // Enviar mensaje de bienvenida
+    send(new_socket, welcome, strlen(welcome), 0);
+    initializeBoard();
+    printBoard();
+
+    char player = 'S';
+    bool game_over = false;
+
+    while (!game_over) {
+        // Imprimir tablero y enviar al cliente
+        std::string board_str = "TABLERO\n";
+        for (int i = 0; i < ROWS; ++i) {
+            for (int j = 0; j < COLS; ++j) {
+                board_str += board[i][j];
+                board_str += ' ';
+            }
+            board_str += '\n';
+        }
+        board_str += "-------------\n";
+        for (int j = 0; j < COLS; ++j) {
+            board_str += ' ';
+            board_str += std::to_string(j + 1);
+        }
+        board_str += '\n';
+        send(new_socket, board_str.c_str(), board_str.length(), 0);
+
+        if (player == 'S') {
+            // Leer movimiento del servidor (jugador S)
+            int move;
+            std::cout << "Ingrese su movimiento (1-7): ";
+            std::cin >> move;
+            move -= 1; // Convertir a índice basado en 0
+
+            if (makeMove(move, player)) {
+                printBoard();
+                if (checkWin(player)) {
+                    std::string win_msg = std::string(1, player) + " ha ganado!\n";
+                    send(new_socket, win_msg.c_str(), win_msg.length(), 0);
+                    game_over = true;
+                } else {
+                    player = 'C'; // Cambiar a jugador C
+                    std::string msg = "Turno del jugador C\n";
+                    send(new_socket, msg.c_str(), msg.length(), 0);
+                }
+            } else {
+                std::cout << "Movimiento inválido. Intente de nuevo.\n";
+            }
+        } else {
+            // Leer movimiento del cliente (jugador C)
+            valread = recv(new_socket, buffer, 1024, 0);
+            if (valread <= 0) {
+                std::cerr << "Error de lectura o el cliente se desconectó" << std::endl;
+                break;
+            }
+
+            int move = atoi(buffer) - 1; // Convertir a índice basado en 0
+            if (makeMove(move, player)) {
+                printBoard();
+                if (checkWin(player)) {
+                    std::string win_msg = std::string(1, player) + " ha ganado!\n";
+                    send(new_socket, win_msg.c_str(), win_msg.length(), 0);
+                    game_over = true;
+                } else {
+                    player = 'S'; // Cambiar a jugador S
+                    std::string msg = "Turno del jugador S\n";
+                    send(new_socket, msg.c_str(), msg.length(), 0);
+                }
+            } else {
+                std::string msg = "Movimiento inválido. Intente de nuevo.\n";
+                send(new_socket, msg.c_str(), msg.length(), 0);
+            }
+        }
+    }
+
+    // Cerrar el socket
+    closesocket(new_socket);
+    closesocket(server_fd);
+    WSACleanup();
+    return 0;
 }

@@ -1,36 +1,29 @@
-# Makefile para compilar y ejecutar Servidor.cpp y Cliente.cpp en Windows con MinGW
+Daniel Gallegos y Felipe Henriquez
+### Makefile
 
-# Compilador y opciones
+```makefile
+# Makefile for Cuatro en Línea Cliente/Servidor
+
+# Compilador y flags
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall
-LDFLAGS = -lws2_32
+CXXFLAGS = -Wall -Wextra -std=c++11
 
-# Archivos fuente y ejecutables
-SERVIDOR_SRC = Servidor.cpp
-CLIENTE_SRC = Cliente.cpp
-SERVIDOR_EXE = servidor.exe
-CLIENTE_EXE = cliente.exe
+# Archivos de origen y ejecutables
+SRCS = Cliente.cpp Servidor.cpp
+OBJS = $(SRCS:.cpp=.o)
+TARGETS = cliente servidor
 
-# Reglas de compilación
-all: $(SERVIDOR_EXE) $(CLIENTE_EXE)
+# Reglas por defecto
+all: $(TARGETS)
 
-$(SERVIDOR_EXE): $(SERVIDOR_SRC)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $(SERVIDOR_EXE) $(SERVIDOR_SRC)
+# Regla para el cliente
+cliente: Cliente.cpp
+	$(CXX) $(CXXFLAGS) Cliente.cpp -o cliente -lws2_32
 
-$(CLIENTE_EXE): $(CLIENTE_SRC)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $(CLIENTE_EXE) $(CLIENTE_SRC)
+# Regla para el servidor
+servidor: Servidor.cpp
+	$(CXX) $(CXXFLAGS) Servidor.cpp -o servidor -lws2_32
 
-# Regla para compilar y ejecutar el servidor
-run-servidor: $(SERVIDOR_EXE)
-	./$(SERVIDOR_EXE)
-
-# Regla para compilar y ejecutar el cliente
-run-cliente: $(CLIENTE_EXE)
-	./$(CLIENTE_EXE)
-
-# Limpieza
+# Limpiar archivos compilados
 clean:
-	rm -f $(SERVIDOR_EXE) $(CLIENTE_EXE)
-
-# Para ejecución en Windows
-run: run-servidor run-cliente
+	rm -f $(OBJS) $(TARGETS)
