@@ -154,12 +154,12 @@ int main(int argc, char* argv[]) {
 
     // Aceptar una conexión entrante
     if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (int*)&addrlen)) == INVALID_SOCKET) {
-        std::cerr << "Error al aceptar la conexión" << std::endl;
+        std::cerr << "Error al aceptar la conexion" << std::endl;
         closesocket(server_fd);
         WSACleanup();
         return -1;
     }
-    std::cout << "Conexión aceptada" << std::endl;
+    std::cout << "Conexion aceptada" << std::endl;
 
     // Enviar mensaje de bienvenida
     send(new_socket, welcome, strlen(welcome), 0);

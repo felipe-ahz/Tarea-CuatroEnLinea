@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 
     // Convertir direcciones IPv4 e IPv6 de texto a formato binario
     if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
-        std::cerr << "Direccion inválida / Direccion no compatible" << std::endl;
+        std::cerr << "Direccion invalida / Direccion no compatible" << std::endl;
         closesocket(sock);
         WSACleanup();
         return -1;
